@@ -1,0 +1,171 @@
+# Publica AICreativeStudio para macOS (Apple Silicon), Windows x64 y Windows ARM64.
+#
+# Sube una etiqueta vX.Y.Z (ver scripts/bump_version.py) para compilar, firmar y publicar.
+# La release empieza como borrador; cada sistema sube su instalador y su paquete de actualización,
+# y sólo cuando están los tres se reconstruye latest.json (lo que lee el actualizador de la app)
+# y se publica. Así releases/latest/download/latest.json nunca apunta a una versión sin tu sistema.
+#
+# Secretos:
+#   TAURI_SIGNING_PRIVATE_KEY (+ _PASSWORD)  firma ed25519 de las actualizaciones — obligatorio.
+#   Firma del sistema operativo (opcional; sin ellos se generan instaladores sin firmar):
+#   macOS:   APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY,
+#            APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID  (notarización)
+#   Windows: WINDOWS_CERTIFICATE (pfx en base64), WINDOWS_CERTIFICATE_PASSWORD
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  checks:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 12 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - uses: astral-sh/setup-uv@v6
+        with: { version: "0.11.28" }
+      - uses: dtolnay/rust-toolchain@stable
+      - run: pnpm install --frozen-lockfile
+      - run: uv sync --project engine --extra diffusion
+      - run: pnpm engine:test
+      - run: node scripts/prepare-bundle.mjs
+      - run: pnpm build
+      - run: cargo test --manifest-path src-tauri/Cargo.toml
+
+  create-release:
+    needs: checks
+    runs-on: ubuntu-latest
+    outputs:
+      id: ${{ steps.draft.outputs.id }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      # El id sale directo de la creación: listar releases justo después puede no encontrarla.
+      - id: draft
+        run: |
+          id=$(gh api "repos/$GITHUB_REPOSITORY/releases" -f tag_name="$TAG" -f name="AICreativeStudio $TAG" \
+            -F draft=true -f body="$(python3 scripts/release_notes.py "$TAG" "$GITHUB_REPOSITORY")" --jq .id)
+          [ -n "$id" ] || exit 1
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS (Apple Silicon)
+            runner: macos-14
+            target: aarch64-apple-darwin
+          - name: Windows x64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+          - name: Windows ARM64
+            runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 12 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - uses: astral-sh/setup-uv@v6
+        with: { version: "0.11.28" }
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: "${{ matrix.target }}" }
+      - uses: swatinem/rust-cache@v2
+        with: { workspaces: "src-tauri -> target" }
+      - run: pnpm install --frozen-lockfile
+
+      # Importa el certificado de Windows si existe (tauri lo usa vía certificateThumbprint).
+      - name: Certificado de firma (Windows)
+        if: runner.os == 'Windows' && env.WINDOWS_CERTIFICATE != ''
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $bytes = [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE)
+          [IO.File]::WriteAllBytes("cert.pfx", $bytes)
+          $pwd = ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath cert.pfx -CertStoreLocation Cert:\CurrentUser\My -Password $pwd
+          $conf = Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json
+          $conf.bundle.windows | Add-Member -NotePropertyName certificateThumbprint -NotePropertyValue $cert.Thumbprint -Force
+          $conf.bundle.windows | Add-Member -NotePropertyName timestampUrl -NotePropertyValue "http://timestamp.digicert.com" -Force
+          $conf | ConvertTo-Json -Depth 20 | Set-Content src-tauri/tauri.conf.json
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # El script de preparación descarga uv y consulta los índices de PyTorch para este target.
+          UV_DOWNLOAD: "1"
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Firma de las actualizaciones (ed25519), no la del sistema operativo.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          args: --target ${{ matrix.target }} --config src-tauri/tauri.release.json
+          releaseId: ${{ needs.create-release.outputs.id }}
+          includeUpdaterJson: true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AICreativeStudio-${{ matrix.target }}
+          path: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+            src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe
+          if-no-files-found: error
+
+  publish-release:
+    needs: [create-release, build]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ github.ref_name }}
+      ID: ${{ needs.create-release.outputs.id }}
+    steps:
+      - uses: actions/checkout@v4
+      # Un borrador no se puede buscar por etiqueta: todo va por su id.
+      - name: Reconstruir latest.json con los paquetes firmados
+        run: |
+          mkdir sigs
+          gh api "repos/$GITHUB_REPOSITORY/releases/$ID/assets" --paginate \
+            --jq '.[] | select(.name | endswith(".sig")) | "\(.id) \(.name)"' |
+          while read -r aid name; do
+            gh api -H "Accept: application/octet-stream" "repos/$GITHUB_REPOSITORY/releases/assets/$aid" > "sigs/$name"
+          done
+          ls sigs
+          python3 scripts/updater_manifest.py "$TAG" "$GITHUB_REPOSITORY" sigs
+          old=$(gh api "repos/$GITHUB_REPOSITORY/releases/$ID/assets" --paginate --jq '.[] | select(.name == "latest.json") | .id')
+          [ -z "$old" ] || gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$old"
+          gh api -X POST -H "Content-Type: application/json" --input latest.json \
+            "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$ID/assets?name=latest.json" > /dev/null
+      # Copias con nombre fijo: releases/latest/download/<nombre> siempre baja la última versión de cada sistema.
+      - name: Instaladores con nombre fijo por sistema
+        run: |
+          mkdir stable
+          gh api "repos/$GITHUB_REPOSITORY/releases/$ID/assets" --paginate --jq '.[] | "\(.id) \(.name)"' > assets.txt
+          python3 scripts/stable_names.py assets.txt | while read -r aid name; do
+            gh api -H "Accept: application/octet-stream" "repos/$GITHUB_REPOSITORY/releases/assets/$aid" > "stable/$name"
+            gh api -X POST -H "Content-Type: application/octet-stream" --input "stable/$name" \
+              "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$ID/assets?name=$name" > /dev/null
+            echo "subido $name"
+          done
+      - name: Publicar
+        run: gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$ID" -F draft=false -f make_latest=true > /dev/null

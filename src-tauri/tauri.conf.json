@@ -1,0 +1,88 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "AICreativeStudio",
+  "version": "0.7.0",
+  "identifier": "com.aicreativestudio.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "node scripts/prepare-bundle.mjs && pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "AICreativeStudio",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 900,
+        "minHeight": 620,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
+      }
+    ],
+    "security": {
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "$APPDATA/**"
+        ]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "app",
+      "dmg",
+      "nsis"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "GraphicsAndDesign",
+    "shortDescription": "Suite local de creación, edición y restauración de imágenes con IA",
+    "publisher": "AICreativeStudio",
+    "copyright": "© 2026 AICreativeStudio",
+    "longDescription": "Crea, edita, mejora y restaura imágenes con IA en tu propio equipo. Sin nube: los modelos se descargan una vez y todo se procesa localmente.",
+    "externalBin": [
+      "binaries/uv"
+    ],
+    "resources": {
+      "../engine/src/aics_engine": "engine/src/aics_engine",
+      "../engine/bundle": "engine/bundle"
+    },
+    "macOS": {
+      "minimumSystemVersion": "13.0",
+      "signingIdentity": "-",
+      "hardenedRuntime": true
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "Spanish",
+          "English"
+        ],
+        "displayLanguageSelector": false,
+        "installerIcon": "icons/icon.ico"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhFMTU0NTQyOUJFRDk1NUYKUldSZmxlMmJRa1VWam02SlpxelBwaENxeHJHNXQ4RjZ1UExtUTVkS3B0eUdUcjNlMTBVdU1NcUYK",
+      "endpoints": [
+        "https://github.com/sorodriguezz/AICreativeStudio/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}

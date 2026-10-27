@@ -1,0 +1,50 @@
+# En cada PR y en cada push a main: tests del motor, de Rust y compilación de la app en los 3 sistemas.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  engine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with: { version: "0.11.28" }
+      - run: uv sync --project engine --extra diffusion
+      - run: uv run --project engine --extra diffusion pytest engine/tests -q
+
+  app:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 12 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - uses: astral-sh/setup-uv@v6
+        with: { version: "0.11.28" }
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: "${{ matrix.target }}" }
+      - uses: swatinem/rust-cache@v2
+        with: { workspaces: "src-tauri -> target" }
+      - run: pnpm install --frozen-lockfile
+      # tauri-build exige que existan el sidecar de uv y los requisitos del motor.
+      - run: node scripts/prepare-bundle.mjs --target ${{ matrix.target }}
+        env: { UV_DOWNLOAD: "1" }
+      - run: pnpm build
+      - run: cargo check --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }}
+      - if: matrix.os == 'macos-14'
+        run: cargo test --manifest-path src-tauri/Cargo.toml

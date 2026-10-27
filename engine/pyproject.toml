@@ -1,0 +1,42 @@
+[project]
+name = "aics-engine"
+version = "0.7.0"
+description = "AICreativeStudio — motor local de inferencia (sidecar)"
+requires-python = ">=3.11,<3.14"
+# Base: API, imagen y modelos ONNX. Funciona en cualquier equipo, incluso sin PyTorch.
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "pydantic>=2.7",
+    "pillow>=10.4",
+    "psutil>=6.0",
+    "huggingface-hub>=0.25",
+    "safetensors>=0.4",
+    "onnxruntime>=1.19",
+    "scipy>=1.14",
+]
+
+[project.optional-dependencies]
+# Difusión y modelos PyTorch. El instalador elige la variante de torch (CUDA / Metal / CPU) aparte.
+diffusion = [
+    "torch>=2.4",
+    "torchvision>=0.19",
+    "diffusers>=0.31",
+    "transformers>=4.44",
+    "accelerate>=0.34",
+    "spandrel>=0.4",
+    "spandrel-extra-arches>=0.2",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.3", "httpx>=0.27"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aics_engine"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

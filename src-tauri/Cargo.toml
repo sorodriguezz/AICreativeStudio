@@ -1,0 +1,60 @@
+[package]
+name = "aicreativestudio"
+version = "0.7.0"
+description = "AICreativeStudio — suite local de creación visual con IA"
+authors = ["AICreativeStudio"]
+edition = "2024"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "aicreativestudio_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.41.0", features = ["bundled"] }
+uuid = { version = "1.29.0", features = ["v4"] }
+tokio = { version = "1.54.1", features = ["time", "sync"] }
+thiserror = "2.0.21"
+reqwest = { version = "0.13.5", default-features = false, features = ["json"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-process = "2"
+tauri-plugin-updater = "2"
+imagesize = "0.15.0"
+base64 = "0.23.1"
+vtracer = "0.6"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "ico"] }
+
+
+# Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true
+
+# Las macros procedurales y los build scripts no se "stripean": con --target, quitarles los
+# símbolos impide que rustc las cargue ("can't find crate for phf_macros").
+[profile.release.build-override]
+strip = false
+
+# En desarrollo, compila optimizadas las dependencias (image, vtracer…): el procesamiento
+# de imagen es ~10× más rápido y el código propio sigue compilando rápido.
+[profile.dev.package."*"]
+opt-level = 3
+
+# Las rutinas genéricas de `image` se monomorfizan en este crate: un poco de optimización
+# en desarrollo evita que crear un kit tarde 10 s en vez de 1 s.
+[profile.dev]
+opt-level = 1
