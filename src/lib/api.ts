@@ -392,6 +392,12 @@ export const api = {
   projects: () => invoke<Project[]>("list_projects"),
   createProject: (name: string, kind?: string) => invoke<string>("create_project", { name, kind }),
   renameProject: (id: string, name: string) => invoke<void>("rename_project", { id, name }),
+  /** Borra el proyecto con sus imágenes, sesiones e historial. */
+  deleteProject: async (id: string) => {
+    const deleted = await invoke<string[]>("delete_project", { id });
+    if (deleted.length) window.dispatchEvent(new CustomEvent<string[]>(ASSETS_DELETED, { detail: deleted }));
+    return deleted;
+  },
   setProjectCover: (projectId: string, assetId: string | null) => invoke<void>("set_project_cover", { projectId, assetId }),
   presets: (category?: string) => invoke<Preset[]>("list_presets", { category }),
   /** `session_id`: la sesión actual, o "new" para abrir una al lanzar el trabajo. */

@@ -317,6 +317,13 @@ export function installMock() {
           p.cover_path = assets.find((x) => x.id === a.assetId)?.path ?? p.cover_path;
           return null;
         }
+        case "delete_project": {
+          if (projects.length <= 1) throw "No puedes borrar el único proyecto. Crea otro primero.";
+          projects.splice(projects.findIndex((p) => p.id === a.id), 1);
+          const gone = assets.filter((x) => x.project_id === a.id).map((x) => x.id);
+          for (let i = assets.length - 1; i >= 0; i--) if (assets[i].project_id === a.id) assets.splice(i, 1);
+          return gone;
+        }
         case "rename_project":
           projects.find((p) => p.id === a.id)!.name = a.name;
           return null;

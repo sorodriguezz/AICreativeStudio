@@ -7,7 +7,7 @@ import { relativeTime } from "../lib/format";
 import { Empty, PageHeader, Thumb } from "../components/ui";
 import Viewer from "../components/Viewer";
 import { useToast } from "../components/Toasts";
-import { useAssetActions } from "../components/AssetActions";
+import { Modal, useAssetActions } from "../components/AssetActions";
 
 interface Props {
   projects: Project[];
@@ -28,6 +28,7 @@ export default function Library({ projects, projectId, onSelect, onProjectsChang
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [renaming, setRenaming] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<Project | null>(null);
   const current = projects.find((p) => p.id === projectId);
 
   useEffect(() => {
@@ -128,6 +129,7 @@ export default function Library({ projects, projectId, onSelect, onProjectsChang
           <h2 className="display">
             {current?.name}
             {current && <button className="icon-btn" title="Renombrar" onClick={() => setRenaming(current.name)}><Pencil size={14} /></button>}
+            {current && projects.length > 1 && <button className="icon-btn icon-btn-danger" title="Borrar proyecto" onClick={() => setDeleting(current)}><Trash2 size={14} /></button>}
           </h2>
         )}
         <div className="row gap-s">
@@ -167,6 +169,18 @@ export default function Library({ projects, projectId, onSelect, onProjectsChang
         </div>
       )}
 
+      {deleting && (
+        <DeleteProjectDialog
+          project={deleting}
+          onClose={() => setDeleting(null)}
+          onDeleted={() => {
+            setDeleting(null);
+            onSelect(projects.find((p) => p.id !== deleting.id)!.id);
+            onProjectsChanged();
+          }}
+        />
+      )}
+
       {viewer !== null && assets.length > 0 && (
         <Viewer
           assets={assets}
@@ -183,5 +197,42 @@ export default function Library({ projects, projectId, onSelect, onProjectsChang
         />
       )}
     </div>
+  );
+}
+
+function DeleteProjectDialog({ project, onClose, onDeleted }: { project: Project; onClose: () => void; onDeleted: () => void }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+
+  async function run() {
+    setBusy(true);
+    try {
+      await api.deleteProject(project.id);
+      toast({ tone: "success", title: "Proyecto borrado", body: project.name });
+      onDeleted();
+    } catch (e) {
+      toast({ tone: "error", title: "No se pudo borrar el proyecto", body: errorText(e) });
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title="Borrar proyecto" onClose={onClose}>
+      <div className="modal-body stack gap-s">
+        <p><strong>{project.name}</strong></p>
+        <p>
+          {project.asset_count > 0
+            ? `Se borrarán ${project.asset_count === 1 ? "su imagen" : `sus ${project.asset_count} imágenes`}, sus sesiones, su historial y sus kits de marca.`
+            : "Se borrarán sus sesiones, su historial y sus kits de marca."}{" "}
+          No se puede deshacer.
+        </p>
+        <p className="muted small">Exporta antes lo que quieras conservar.</p>
+      </div>
+      <footer className="modal-foot">
+        <button className="btn btn-ghost" onClick={onClose}>Cancelar</button>
+        <span className="grow" />
+        <button className="btn btn-danger" disabled={busy} onClick={run} autoFocus>{busy ? <span className="spinner" /> : <Trash2 size={15} />} Borrar proyecto</button>
+      </footer>
+    </Modal>
   );
 }

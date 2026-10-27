@@ -117,6 +117,21 @@ pub fn rename_project(state: State<'_, AppState>, id: String, name: String) -> A
     db::rename_project(&state.db.lock().unwrap(), &id, name.trim())
 }
 
+/// Borra el proyecto, sus imágenes y su carpeta. Devuelve los ids de las imágenes eliminadas.
+#[tauri::command]
+pub fn delete_project(state: State<'_, AppState>, id: String) -> AppResult<Vec<String>> {
+    let mut conn = state.db.lock().unwrap();
+    let deleted = db::delete_project(&mut conn, &id)?;
+    for asset in &deleted {
+        let path = Path::new(&asset.path);
+        if path.starts_with(&state.paths.root) && !db::path_in_use(&conn, &asset.path)? {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+    let _ = std::fs::remove_dir_all(state.paths.project(&id));
+    Ok(deleted.into_iter().map(|a| a.id).collect())
+}
+
 #[tauri::command]
 pub fn set_project_cover(state: State<'_, AppState>, project_id: String, asset_id: Option<String>) -> AppResult<()> {
     db::set_project_cover(&state.db.lock().unwrap(), &project_id, asset_id.as_deref())

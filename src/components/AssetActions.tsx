@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { open } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { BookmarkCheck, BookmarkPlus, Check, Download, FolderOpen, Shapes, Trash2, X } from "lucide-react";
@@ -88,7 +89,8 @@ export function Modal({ title, onClose, children, wide }: { title: string; onClo
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
-  return (
+  // En un portal: un ancestro con backdrop-filter (la barra superior) encerraría el position: fixed.
+  return createPortal(
     <div className="modal-backdrop" onMouseDown={onClose}>
       <div className={`modal ${wide ? "modal-wide" : ""}`} onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-label={title}>
         <header className="modal-head">
@@ -97,7 +99,8 @@ export function Modal({ title, onClose, children, wide }: { title: string; onClo
         </header>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

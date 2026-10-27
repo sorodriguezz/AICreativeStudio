@@ -68,7 +68,7 @@ export default function SessionSwitcher({ projectId, section }: { projectId: str
                   </span>
                 </button>
                 <button className="icon-btn icon-btn-s" title="Renombrar" onClick={() => setRenaming({ id: s.id, name: s.name })}><Pencil size={12} /></button>
-                <button className="icon-btn icon-btn-s" title="Borrar sesión" onClick={() => { setDeleting(s); setOpen(false); }}><Trash2 size={12} /></button>
+                <button className="icon-btn icon-btn-s icon-btn-danger" title="Borrar sesión" onClick={() => { setDeleting(s); setOpen(false); }}><Trash2 size={12} /></button>
               </div>
             ),
           )}

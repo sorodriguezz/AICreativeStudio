@@ -1,6 +1,6 @@
 [package]
 name = "aicreativestudio"
-version = "0.7.2"
+version = "0.7.3"
 description = "AICreativeStudio — suite local de creación visual con IA"
 authors = ["AICreativeStudio"]
 edition = "2024"

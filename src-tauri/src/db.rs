@@ -336,6 +336,37 @@ pub fn set_project_cover(conn: &Connection, project_id: &str, asset_id: Option<&
     Ok(())
 }
 
+/// Borra el proyecto con todo lo suyo (imágenes, trabajos, sesiones, kits y lotes).
+/// Devuelve las imágenes borradas para quitar sus archivos. Siempre queda al menos un proyecto.
+pub fn delete_project(conn: &mut Connection, id: &str) -> AppResult<Vec<Asset>> {
+    if !project_exists(conn, id)? {
+        return Err(crate::error::AppError::Invalid("El proyecto no existe".into()));
+    }
+    let others: bool = conn.query_row("SELECT EXISTS(SELECT 1 FROM projects WHERE id != ?1)", params![id], |r| r.get(0))?;
+    if !others {
+        return Err(crate::error::AppError::Invalid("No puedes borrar el único proyecto. Crea otro primero.".into()));
+    }
+    let busy: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM jobs WHERE project_id = ?1 AND status IN ('queued', 'running'))
+             OR EXISTS(SELECT 1 FROM batches WHERE project_id = ?1 AND status = 'running')",
+        params![id],
+        |r| r.get(0),
+    )?;
+    if busy {
+        return Err(crate::error::AppError::Invalid("El proyecto tiene trabajos en curso. Espera a que terminen o cancélalos.".into()));
+    }
+    let tx = conn.transaction()?;
+    let assets = {
+        let mut stmt = tx.prepare("SELECT * FROM assets WHERE project_id = ?1")?;
+        let rows = stmt.query_map(params![id], asset_from_row)?;
+        rows.collect::<Result<Vec<_>, _>>()?
+    };
+    tx.execute("DELETE FROM assets WHERE project_id = ?1", params![id])?;
+    tx.execute("DELETE FROM projects WHERE id = ?1", params![id])?;
+    tx.commit()?;
+    Ok(assets)
+}
+
 pub fn touch_project(conn: &Connection, id: &str) -> AppResult<()> {
     conn.execute("UPDATE projects SET updated_at = datetime('now') WHERE id = ?1", params![id])?;
     Ok(())
@@ -995,6 +1026,24 @@ mod tests {
         assert_eq!(get_job(&conn, "j3").unwrap().unwrap().output_asset_id.as_deref(), Some(ids[1].as_str()));
         delete_assets(&mut conn, &[ids[1].clone(), original], false).unwrap();
         assert_eq!(get_job(&conn, "j3").unwrap().unwrap().output_asset_id, None);
+    }
+
+    #[test]
+    fn deleting_a_project_removes_its_contents_but_not_the_last_one() {
+        let mut conn = mem();
+        assert!(delete_project(&mut conn, "general").is_err()); // el único
+        let other = create_project(&conn, "Otro", "general").unwrap();
+        let a = insert_original(&conn, &other, "/x/a.png", Some(8), Some(8), "a.png").unwrap();
+        let params = serde_json::json!({});
+        insert_job(&conn, &NewJob { id: "jp", project_id: &other, mode: "create", prompt: "", negative: "", params: &params, input_asset_id: Some(&a), person_id: None, session_id: None }).unwrap();
+        assert!(delete_project(&mut conn, &other).is_err()); // trabajo en curso
+
+        conn.execute("UPDATE jobs SET status = 'completed' WHERE id = 'jp'", []).unwrap();
+        let removed = delete_project(&mut conn, &other).unwrap();
+        assert_eq!(removed.len(), 1);
+        assert!(!project_exists(&conn, &other).unwrap());
+        assert!(get_job(&conn, "jp").unwrap().is_none());
+        assert!(get_asset(&conn, &a).unwrap().is_none());
     }
 
     #[test]

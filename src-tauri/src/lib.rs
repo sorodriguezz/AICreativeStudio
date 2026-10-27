@@ -72,6 +72,7 @@ pub fn run() {
             commands::list_projects,
             commands::create_project,
             commands::rename_project,
+            commands::delete_project,
             commands::set_project_cover,
             commands::list_presets,
             commands::create_job,
