@@ -1,6 +1,6 @@
 [project]
 name = "aics-engine"
-version = "0.7.0"
+version = "0.7.1"
 description = "AICreativeStudio — motor local de inferencia (sidecar)"
 requires-python = ">=3.11,<3.14"
 # Base: API, imagen y modelos ONNX. Funciona en cualquier equipo, incluso sin PyTorch.

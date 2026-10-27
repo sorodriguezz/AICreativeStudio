@@ -86,7 +86,7 @@ GitHub Actions (ver *Releases y actualizaciones*).
 
 - **[`ci.yml`](../.github/workflows/ci.yml)**: en cada PR y en cada push a `main`, ejecuta los tests del motor
   y de Rust, y compila la app en las 3 plataformas.
-- **[`release.yml`](../.github/workflows/release.yml)**: al subir una etiqueta `vX.Y.Z`, crea un borrador de
+- **[`release.yml`](../.github/workflows/release.yml)**: al subir una versión nueva a `main`, crea su tag `vX.Y.Z`, un borrador de
   release y compila en runners nativos (`macos-15`, `windows-latest`, `windows-11-arm`). Cada uno sube su
   instalador y su paquete de actualización **firmado** (ed25519). Cuando están los tres, reconstruye
   `latest.json` con `scripts/updater_manifest.py`, sube copias con nombre fijo por sistema
@@ -111,11 +111,34 @@ Configuración inicial (una sola vez):
 Publicar una versión:
 
 ```bash
-python3 scripts/bump_version.py 0.7.0
+python3 scripts/bump_version.py 0.7.2
 ```
 
 ```bash
-git commit -am "Release v0.7.0" && git tag -a v0.7.0 -m v0.7.0 && git push --follow-tags
+git add -A
+git commit -m "Release v0.7.2"
+git push origin main
+```
+
+Al hacer push a `main`, el workflow comprueba que la versión coincida en la app, Tauri, el motor
+(si existe) y los archivos de bloqueo. Si `vX.Y.Z` todavía no existe, crea el tag anotado en ese
+mismo commit y construye su release. Un push sin cambio de versión no vuelve a publicar.
+Los tags y las releases pertenecen únicamente a este repositorio.
+
+La compilación y publicación continúan en el mismo workflow: el tag creado con `GITHUB_TOKEN`
+no necesita disparar otro workflow ni requiere un token personal. La release se publica sólo
+cuando están disponibles los instaladores y las actualizaciones firmadas de las tres plataformas.
+
+Si falla una publicación, usa **Actions → release → Re-run all jobs** en la ejecución original.
+También puedes usar **Run workflow** seleccionando el tag de esa versión. Se reutiliza el borrador;
+una release ya publicada no se sobrescribe y un tag existente nunca se mueve a otro commit.
+Si necesitas corregir código, incrementa la versión y sube un commit nuevo.
+
+Comprobar la automatización localmente:
+
+```bash
+python3 scripts/bump_version.py --check
+python3 -m unittest discover -s scripts -p test_release.py -v
 ```
 
 `createUpdaterArtifacts` sólo se activa en CI (`src-tauri/tauri.release.json`), así un `pnpm tauri build`

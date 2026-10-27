@@ -1,6 +1,6 @@
 # Publica AICreativeStudio para macOS (Apple Silicon), Windows x64 y Windows ARM64.
 #
-# Sube una etiqueta vX.Y.Z (ver scripts/bump_version.py) para compilar, firmar y publicar.
+# Al subir una versión nueva a main se crea su tag y se compila, firma y publica.
 # La release empieza como borrador; cada sistema sube su instalador y su paquete de actualización,
 # y sólo cuando están los tres se reconstruye latest.json (lo que lee el actualizador de la app)
 # y se publica. Así releases/latest/download/latest.json nunca apunta a una versión sin tu sistema.
@@ -15,17 +15,48 @@ name: release
 
 on:
   push:
+    branches: [main]
     tags: ["v*"]
+
+  workflow_dispatch:
 
 permissions:
   contents: write
 
+# One publication at a time; never cancel an installer build in progress.
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      sha: ${{ steps.version.outputs.sha }}
+      publish: ${{ steps.version.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Test release automation
+        run: python3 -m unittest discover -s scripts -p test_release.py -v
+      - name: Validate version and create its tag
+        id: version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPDATER_SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: python3 scripts/prepare_release.py
+
   # En Linux: los runners de macOS a veces tardan en asignarse, y los tests de Rust ya corren en ci.yml.
   checks:
+    needs: prepare
+    if: needs.prepare.outputs.publish == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
       - uses: pnpm/action-setup@v4
         with: { version: 12 }
       - uses: actions/setup-node@v4
@@ -38,18 +69,28 @@ jobs:
       - run: pnpm build
 
   create-release:
-    needs: checks
+    needs: [prepare, checks]
     runs-on: ubuntu-latest
     outputs:
       id: ${{ steps.draft.outputs.id }}
+      tag: ${{ needs.prepare.outputs.tag }}
+      sha: ${{ needs.prepare.outputs.sha }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      TAG: ${{ github.ref_name }}
+      TAG: ${{ needs.prepare.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
       # El id sale directo de la creación: listar releases justo después puede no encontrarla.
       - id: draft
         run: |
+          existing=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
+            --jq '.[] | select(.tag_name == env.TAG) | .id')
+          if [ -n "$existing" ]; then
+            echo "id=$existing" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           id=$(gh api "repos/$GITHUB_REPOSITORY/releases" -f tag_name="$TAG" -f name="AICreativeStudio $TAG" \
             -F draft=true -f body="$(python3 scripts/release_notes.py "$TAG" "$GITHUB_REPOSITORY")" --jq .id)
           [ -n "$id" ] || exit 1
@@ -74,6 +115,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.create-release.outputs.sha }}
       - uses: pnpm/action-setup@v4
         with: { version: 12 }
       - uses: actions/setup-node@v4
@@ -150,10 +193,12 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      TAG: ${{ github.ref_name }}
+      TAG: ${{ needs.create-release.outputs.tag }}
       ID: ${{ needs.create-release.outputs.id }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.create-release.outputs.sha }}
       # Un borrador no se puede buscar por etiqueta: todo va por su id.
       - name: Reconstruir latest.json con los paquetes firmados
         run: |
