@@ -111,6 +111,10 @@ fn free_port() -> std::io::Result<u16> {
 
 impl Engine {
     pub fn new() -> Self {
+        // The updater initializes ring only when checking for updates. Startup
+        // creates this client first, so rustls-no-provider needs it here too.
+        // An existing process-wide provider is kept when this returns Err.
+        let _ = rustls::crypto::ring::default_provider().install_default();
         Self {
             inner: Mutex::new(Inner {
                 child: None,
@@ -204,6 +208,9 @@ impl Engine {
                 .arg("--data-dir").arg(&paths.root)
                 .args(["--parent-pid", &std::process::id().to_string()])
                 .env("PYTHONUNBUFFERED", "1")
+                // Bundled Python sources are signed resources: writing .pyc
+                // beside them would invalidate the app after its first launch.
+                .env("PYTHONDONTWRITEBYTECODE", "1")
                 .stdin(Stdio::null())
                 .stdout(log.try_clone()?)
                 .stderr(log);
@@ -342,5 +349,20 @@ impl Engine {
     pub async fn post(&self, path: &str, body: &Value) -> AppResult<Value> {
         let token = self.ensure_ready().await?;
         self.send(self.http.post(self.url(path)).json(body), token).await
+    }
+}
+
+#[cfg(test)]
+mod startup_tests {
+    use super::Engine;
+
+    #[test]
+    fn engine_can_be_created_before_an_update_check() {
+        // Startup creates this client before the updater can initialize TLS.
+        let engine = Engine::new();
+        assert_eq!(engine.status().state, "stopped");
+        // Restarting the engine must also accept an already installed provider.
+        let restarted = Engine::new();
+        assert_eq!(restarted.status().state, "stopped");
     }
 }

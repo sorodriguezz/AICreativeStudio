@@ -133,6 +133,10 @@ jobs:
           releaseId: ${{ needs.create-release.outputs.id }}
           includeUpdaterJson: true
 
+      - name: Verify macOS app signature before publishing the release
+        if: runner.os == 'macOS'
+        run: codesign --verify --deep --strict --verbose=2 "src-tauri/target/${{ matrix.target }}/release/bundle/macos/AICreativeStudio.app"
+
       - uses: actions/upload-artifact@v4
         with:
           name: AICreativeStudio-${{ matrix.target }}

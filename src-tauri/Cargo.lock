@@ -38,6 +38,7 @@ dependencies = [
  "imagesize",
  "reqwest",
  "rusqlite",
+ "rustls",
  "serde",
  "serde_json",
  "tauri",
