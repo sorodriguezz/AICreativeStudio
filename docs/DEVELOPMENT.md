@@ -87,7 +87,7 @@ GitHub Actions (ver *Releases y actualizaciones*).
 - **[`ci.yml`](../.github/workflows/ci.yml)**: en cada PR y en cada push a `main`, ejecuta los tests del motor
   y de Rust, y compila la app en las 3 plataformas.
 - **[`release.yml`](../.github/workflows/release.yml)**: al subir una etiqueta `vX.Y.Z`, crea un borrador de
-  release y compila en runners nativos (`macos-14`, `windows-latest`, `windows-11-arm`). Cada uno sube su
+  release y compila en runners nativos (`macos-15`, `windows-latest`, `windows-11-arm`). Cada uno sube su
   instalador y su paquete de actualización **firmado** (ed25519). Cuando están los tres, reconstruye
   `latest.json` con `scripts/updater_manifest.py`, sube copias con nombre fijo por sistema
   (`scripts/stable_names.py`) y publica. El texto de la release (`scripts/release_notes.py`) tiene una tabla

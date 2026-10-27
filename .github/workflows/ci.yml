@@ -21,7 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
+          - os: macos-15
             target: aarch64-apple-darwin
           - os: windows-latest
             target: x86_64-pc-windows-msvc
@@ -46,5 +46,5 @@ jobs:
         env: { UV_DOWNLOAD: "1" }
       - run: pnpm build
       - run: cargo check --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }}
-      - if: matrix.os == 'macos-14'
+      - if: matrix.os == 'macos-15'
         run: cargo test --manifest-path src-tauri/Cargo.toml
