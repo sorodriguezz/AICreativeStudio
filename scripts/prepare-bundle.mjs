@@ -24,11 +24,21 @@ const target = argTarget > -1 ? process.argv[argTarget + 1] : process.env.TAURI_
 const isWindows = target.includes("windows");
 
 // ---------- 1. Requisitos ----------
-const exportReqs = (extra) =>
-  execFileSync("uv", ["export", "--project", engine, "--frozen", "--no-hashes", "--no-dev", "--no-emit-project", "--no-header", ...(extra ? ["--extra", extra] : [])], { encoding: "utf8" })
+// Sin color ni anotaciones: en CI uv colorea los "# via …" y los códigos ANSI llegaban al instalador
+// como requisitos inválidos ("Unexpected '\x1b[32m…'"), y el primer arranque fallaba.
+const ANSI = /\x1b\[[0-9;]*[A-Za-z]/g;
+const REQUIREMENT = /^[A-Za-z0-9][A-Za-z0-9._-]*(\[[^\]]+\])?\s*(==|>=|<=|~=|!=|>|<|@)\s*\S[^\s;]*(\s*;\s*.+)?$/;
+const exportReqs = (extra) => {
+  const lines = execFileSync("uv", ["export", "--project", engine, "--frozen", "--no-hashes", "--no-dev", "--no-emit-project", "--no-header",
+    "--no-annotate", "--color", "never", ...(extra ? ["--extra", extra] : [])], { encoding: "utf8", env: { ...process.env, NO_COLOR: "1", FORCE_COLOR: "0", CLICOLOR_FORCE: "0" } })
+    .replace(ANSI, "")
     .split("\n")
     .map((l) => l.trim())
     .filter((l) => l && !l.startsWith("#") && !l.startsWith("-e"));
+  const bad = lines.filter((l) => !REQUIREMENT.test(l));
+  if (bad.length) throw new Error(`uv export devolvió líneas que no son requisitos:\n${bad.join("\n")}`);
+  return lines;
+};
 const name = (l) => l.split(/[=<>;\s]/)[0].toLowerCase();
 
 const core = exportReqs();
