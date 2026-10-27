@@ -115,7 +115,7 @@ python3 scripts/bump_version.py 0.7.0
 ```
 
 ```bash
-git commit -am "Release v0.7.0" && git tag v0.7.0 && git push --follow-tags
+git commit -am "Release v0.7.0" && git tag -a v0.7.0 -m v0.7.0 && git push --follow-tags
 ```
 
 `createUpdaterArtifacts` sólo se activa en CI (`src-tauri/tauri.release.json`), así un `pnpm tauri build`

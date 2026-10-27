@@ -21,8 +21,9 @@ permissions:
   contents: write
 
 jobs:
+  # En Linux: los runners de macOS a veces tardan en asignarse, y los tests de Rust ya corren en ci.yml.
   checks:
-    runs-on: macos-14
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -31,13 +32,10 @@ jobs:
         with: { node-version: 24, cache: pnpm }
       - uses: astral-sh/setup-uv@v6
         with: { version: "0.11.28" }
-      - uses: dtolnay/rust-toolchain@stable
       - run: pnpm install --frozen-lockfile
       - run: uv sync --project engine --extra diffusion
       - run: pnpm engine:test
-      - run: node scripts/prepare-bundle.mjs
       - run: pnpm build
-      - run: cargo test --manifest-path src-tauri/Cargo.toml
 
   create-release:
     needs: checks

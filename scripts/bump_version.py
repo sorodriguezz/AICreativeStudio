@@ -2,7 +2,7 @@
 """Cambia la versión de la app en todos los sitios donde se declara.
 
 Uso: python3 scripts/bump_version.py 0.7.0
-Después: git commit -am "Release v0.7.0" && git tag v0.7.0 && git push --follow-tags
+Después: git commit -am "Release v0.7.0" && git tag -a v0.7.0 -m v0.7.0 && git push --follow-tags
 """
 
 import json
@@ -30,7 +30,7 @@ def main() -> None:
     init.write_text(re.sub(r'__version__ = "[^"]+"', f'__version__ = "{v}"', init.read_text()))
 
     print(f"versión {v}")
-    print(f'siguiente: git commit -am "Release v{v}" && git tag v{v} && git push --follow-tags')
+    print(f'siguiente: git commit -am "Release v{v}" && git tag -a v{v} -m v{v} && git push --follow-tags')
 
 
 if __name__ == "__main__":
